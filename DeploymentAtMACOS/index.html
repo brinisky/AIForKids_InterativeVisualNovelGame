@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PI Agent · 与未来的自己对话</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: "PingFang SC", "Comic Sans MS", -apple-system, sans-serif;
+    min-height: 100vh;
+    display: flex; flex-direction: column; align-items: center;
+    background: #aee1f9 url('/api/assets/bg_default.png') center/cover fixed no-repeat;
+    transition: background-image 1s;
+  }
+  body::before {
+    content: ''; position: fixed; inset: 0; pointer-events: none;
+    background: rgba(255, 255, 255, 0.28);
+  }
+  header {
+    padding: 16px; font-size: 26px; font-weight: 800; z-index: 1;
+    background: linear-gradient(90deg, #ff6b9d, #ffa63d, #4ecdc4, #5b8def);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    text-shadow: 0 2px 8px rgba(255,255,255,.6);
+  }
+  .stage-tip {
+    width: 100%; padding: 0 32px 10px; z-index: 1;
+    font-size: 15px; color: #555; font-weight: 600;
+  }
+  .msgs {
+    flex: 1; width: 100%; min-height: 200px; z-index: 1;
+    overflow-y: auto; padding: 4px 32px;
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  .msg {
+    max-width: 72%; padding: 14px 22px; border-radius: 24px;
+    white-space: pre-wrap; word-break: break-word;
+    line-height: 1.7; font-size: 18px;
+    animation: pop .25s ease;
+  }
+  @keyframes pop { from { transform: scale(.92); opacity: 0; } }
+  .user {
+    align-self: flex-end; color: #fff;
+    background: linear-gradient(135deg, #5b8def, #9b6bff);
+    border-bottom-right-radius: 8px;
+    box-shadow: 0 3px 10px rgba(91,141,239,.35);
+  }
+  .agent {
+    align-self: flex-start; color: #333;
+    background: rgba(255,255,255,.92);
+    border: 2px solid #ffd9e8;
+    border-bottom-left-radius: 8px;
+    box-shadow: 0 3px 10px rgba(255,107,157,.18);
+  }
+  .bar {
+    width: 100%; padding: 14px 32px 24px; z-index: 1;
+    display: flex; gap: 12px;
+  }
+  .bar input {
+    flex: 1; padding: 16px 24px; font-size: 18px;
+    border: 3px solid #ffd9e8; border-radius: 999px; outline: none;
+    background: rgba(255,255,255,.92);
+  }
+  .bar input:focus { border-color: #ff6b9d; }
+  .bar button {
+    padding: 0 32px; border: none; border-radius: 999px;
+    background: linear-gradient(135deg, #ff6b9d, #ffa63d);
+    color: #fff; font-size: 18px; font-weight: 700; cursor: pointer;
+    box-shadow: 0 4px 12px rgba(255,107,157,.4);
+    transition: transform .15s;
+  }
+  .bar button:hover { transform: scale(1.06); }
+  .bar button:disabled { opacity: .5; transform: none; }
+  #scenePanel {
+    width: 100%; padding: 0 32px 14px; z-index: 1; align-self: stretch;
+  }
+  #sceneImg {
+    width: 100%; max-height: 42vh; object-fit: cover;
+    border-radius: 24px; display: block;
+    border: 4px solid rgba(255,255,255,.9);
+    box-shadow: 0 8px 24px rgba(0,0,0,.18);
+    transition: opacity .5s;
+  }
+  /* 章节胶囊 */
+  #levelPill {
+    z-index: 1; margin: 0 32px 10px; align-self: flex-start;
+    padding: 8px 20px; border-radius: 999px;
+    background: linear-gradient(135deg, rgba(255,255,255,.95), rgba(255,240,246,.95));
+    border: 2px solid #ffd9e8;
+    font-size: 16px; font-weight: 700; color: #d6336c;
+    box-shadow: 0 3px 10px rgba(255,107,157,.2);
+  }
+  /* 选择按钮区（Galgame 式，位于自由输入上方） */
+  #choicesBar {
+    width: 100%; padding: 4px 32px 6px; z-index: 1;
+    display: flex; flex-direction: column; gap: 10px; align-items: center;
+  }
+  .choice-btn {
+    width: min(560px, 90%); padding: 16px 24px;
+    border: 3px solid #ffb3c8; border-radius: 999px;
+    background: rgba(255,255,255,.95);
+    color: #d6336c; font-size: 18px; font-weight: 700; cursor: pointer;
+    box-shadow: 0 4px 14px rgba(255,107,157,.25);
+    transition: transform .15s, background .15s;
+    animation: pop .3s ease;
+  }
+  .choice-btn:hover {
+    transform: scale(1.04);
+    background: linear-gradient(135deg, #ff6b9d, #ffa63d);
+    color: #fff;
+  }
+  .choice-btn:disabled { opacity: .5; transform: none; }
+  /* 结束界面 */
+  #endingOverlay {
+    position: fixed; inset: 0; z-index: 10;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(30, 20, 50, 0.55);
+    backdrop-filter: blur(6px);
+    animation: fadein .8s ease;
+  }
+  @keyframes fadein { from { opacity: 0; } }
+  .ending-card {
+    width: min(620px, 90%); max-height: 86vh; overflow-y: auto;
+    background: linear-gradient(160deg, #fff8f0, #ffeef5);
+    border-radius: 32px; padding: 40px 36px; text-align: center;
+    border: 4px solid #ffd9e8;
+    box-shadow: 0 20px 60px rgba(0,0,0,.3);
+  }
+  .ending-card .stars { font-size: 40px; letter-spacing: 8px; }
+  .ending-card h1 { font-size: 30px; color: #d6336c; margin: 14px 0 6px; }
+  .ending-card .sub { color: #9775a6; font-size: 15px; margin-bottom: 18px; }
+  .ending-card .letter {
+    text-align: left; font-size: 17px; line-height: 1.8; color: #4a3b52;
+    background: rgba(255,255,255,.85); border-radius: 18px;
+    padding: 18px 22px; margin-bottom: 18px; white-space: pre-wrap;
+  }
+  .ending-card .path {
+    text-align: left; font-size: 13px; color: #9775a6;
+    margin-bottom: 22px; line-height: 1.8;
+  }
+  .ending-card button {
+    padding: 14px 44px; border: none; border-radius: 999px;
+    background: linear-gradient(135deg, #ff6b9d, #ffa63d);
+    color: #fff; font-size: 19px; font-weight: 700; cursor: pointer;
+    box-shadow: 0 6px 16px rgba(255,107,157,.45);
+    transition: transform .15s;
+  }
+  .ending-card button:hover { transform: scale(1.06); }
+  #muteBtn {
+    position: fixed; top: 14px; right: 18px; z-index: 20;
+    border: 2px solid #ffd9e8; border-radius: 999px; padding: 8px 14px;
+    background: rgba(255,255,255,.92); font-size: 18px; cursor: pointer;
+    box-shadow: 0 3px 10px rgba(0,0,0,.15);
+  }
+  .mic-btn {
+    width: 56px; border: 3px solid #ffd9e8; border-radius: 999px;
+    background: rgba(255,255,255,.95); font-size: 22px; cursor: pointer;
+    box-shadow: 0 4px 12px rgba(255,107,157,.25);
+    transition: transform .15s;
+  }
+  .mic-btn:hover { transform: scale(1.08); }
+  .mic-btn.recording {
+    background: #e11d48; border-color: #e11d48;
+    animation: pulse 1s infinite;
+  }
+  @keyframes pulse { 50% { transform: scale(1.14); } }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<header>🌈 与未来的自己对话 💫</header>
+<button id="muteBtn" title="朗读开关">🔊</button>
+
+<!-- ========== 阶段一：认识一下 ========== -->
+<div id="profileStage" style="display:flex;flex:1;width:100%;flex-direction:column;align-items:center;min-height:0;z-index:1;">
+  <div class="stage-tip">🎈 先聊两句，让我认识你吧！</div>
+  <div class="msgs" id="profMsgs"></div>
+  <div class="bar">
+    <input id="profInput" placeholder="说说你自己……" autofocus>
+    <button class="mic-btn" id="profMic" title="语音输入">🎤</button>
+    <button id="profSend">发送 🚀</button>
+  </div>
+</div>
+
+<!-- ========== 阶段二：剧情树（旁白 + 按钮选择） ========== -->
+<div id="chatStage" class="hidden" style="flex:1;width:100%;flex-direction:column;align-items:flex-start;min-height:0;z-index:1;">
+  <div id="levelPill" class="hidden"></div>
+  <div id="scenePanel" class="hidden">
+    <img id="sceneImg" alt="剧情画面">
+  </div>
+  <div class="msgs" id="chatMsgs"></div>
+  <div id="choicesBar" class="hidden"></div>
+  <div class="bar" id="inputBar">
+    <input id="input" placeholder="说点什么……">
+    <button class="mic-btn" id="chatMic" title="语音输入">🎤</button>
+    <button id="send">发送 🚀</button>
+  </div>
+</div>
+
+<!-- ========== 结束界面 ========== -->
+<div id="endingOverlay" class="hidden">
+  <div class="ending-card">
+    <div class="stars">⭐ ✨ ⭐</div>
+    <h1 id="endingTitle"></h1>
+    <div class="sub">故事讲完啦，谢谢你陪我走完这段时光</div>
+    <div class="letter" id="endingLetter"></div>
+    <div class="path" id="endingPath"></div>
+    <button id="againBtn">🔁 再玩一次</button>
+  </div>
+</div>
+
+<script>
+  // ---------- 通用小工具 ----------
+  function addMsg(box, text, who) {
+    const div = document.createElement('div');
+    div.className = 'msg ' + who;
+    div.textContent = text;
+    box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
+  }
+  async function post(url, data) {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data || {})
+    });
+    return res.json();
+  }
+
+  // ---------- 动态背景 ----------
+  let currentBg = 'bg_default.png';
+  function updateBg(bg) {
+    if (!bg || bg === currentBg) return;
+    currentBg = bg;
+    const img = new Image();
+    img.onload = () => {
+      document.body.style.backgroundImage = `url('/api/assets/${bg}')`;
+    };
+    img.src = '/api/assets/' + bg + '?t=' + Date.now();
+  }
+
+  // ---------- TTS 朗读 ----------
+  let muted = false;
+  let currentAudio = null;
+  const muteBtn = document.getElementById('muteBtn');
+  muteBtn.onclick = () => {
+    muted = !muted;
+    muteBtn.textContent = muted ? '🔇' : '🔊';
+    if (muted && currentAudio) currentAudio.pause();
+  };
+
+  async function speakText(text) {
+    if (muted || !text) return;
+    try {
+      const res = await fetch('/api/tts?text=' + encodeURIComponent(text));
+      const data = await res.json();
+      if (!data.audio || muted) return;
+      if (currentAudio) currentAudio.pause();   // 新语音顶掉旧的
+      currentAudio = new Audio('/api/assets/' + data.audio);
+      currentAudio.play().catch(() => {});
+    } catch (e) { /* 静默失败 */ }
+  }
+
+  // ---------- 语音输入（浏览器语音识别，不支持则隐藏按钮） ----------
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  function setupMic(btn, inputEl, onSend) {
+    if (!SR) { btn.style.display = 'none'; return; }
+    const rec = new SR();
+    rec.lang = 'zh-CN';
+    rec.interimResults = false;
+    let active = false;
+    btn.onclick = () => { if (!active) { try { rec.start(); } catch (e) {} } else rec.stop(); };
+    rec.onstart = () => { active = true; btn.classList.add('recording'); };
+    rec.onend = () => { active = false; btn.classList.remove('recording'); };
+    rec.onerror = rec.onend;
+    rec.onresult = (e) => {
+      inputEl.value = e.results[0][0].transcript;
+      onSend();   // 说完自动发送
+    };
+  }
+
+  // ---------- 阶段一：画像采集 ----------
+  const profMsgs = document.getElementById('profMsgs');
+  const profInput = document.getElementById('profInput');
+  const profSend = document.getElementById('profSend');
+  let profCount = 0;
+  let finalizing = false;
+
+  async function profChat() {
+    const msg = profInput.value.trim();
+    if (!msg || finalizing) return;
+    addMsg(profMsgs, msg, 'user');
+    profInput.value = '';
+    profSend.disabled = true;
+    try {
+      const data = await post('/api/profile_chat', { message: msg });
+      addMsg(profMsgs, data.reply, 'agent');
+      speakText(data.reply);
+      profCount = data.count;
+      if (profCount >= 2) {
+        // 聊满两句：生成画像（不展示），随后进入剧情树
+        finalizing = true;
+        addMsg(profMsgs, '太棒了！我已经认识你啦，故事要开始咯！🎉', 'agent');
+        let story = null;
+        try {
+          const data = await post('/api/profile_done');
+          story = data.story || null;
+        } catch (e) { /* 静默失败 */ }
+        showChatStage();
+        if (story) renderStory(story);
+        return;
+      }
+    } catch (e) {
+      addMsg(profMsgs, '❌ 网络错误：' + e.message, 'agent');
+    }
+    profSend.disabled = false;
+    profInput.focus();
+  }
+  profSend.onclick = profChat;
+  profInput.addEventListener('keydown', e => { if (e.key === 'Enter') profChat(); });
+
+  // ---------- 阶段二：剧情树 ----------
+  const profileStage = document.getElementById('profileStage');
+  const chatStage = document.getElementById('chatStage');
+  const chatMsgs = document.getElementById('chatMsgs');
+  const input = document.getElementById('input');
+  const send = document.getElementById('send');
+  const inputBar = document.getElementById('inputBar');
+  const choicesBar = document.getElementById('choicesBar');
+  const scenePanel = document.getElementById('scenePanel');
+  const sceneImg = document.getElementById('sceneImg');
+  const levelPill = document.getElementById('levelPill');
+  let choosing = false;
+
+  function showChatStage() {
+    profileStage.classList.add('hidden');
+    chatStage.classList.remove('hidden');
+    chatStage.style.display = 'flex';
+    chatMsgs.innerHTML = '';
+    startScenePoll();
+  }
+
+  function renderStory(story) {
+    if (!story) return;
+    // 章节胶囊
+    levelPill.textContent = `${story.emoji} ${story.title}`;
+    levelPill.classList.remove('hidden');
+    // 旁白 + 对白
+    addMsg(chatMsgs, story.narration, 'agent');
+    speakText(story.narration);
+    if (story.done) {
+      // 剧情结束的一刻：收起输入与按钮，进入结束界面
+      choicesBar.classList.add('hidden');
+      inputBar.classList.add('hidden');
+      setTimeout(() => showEnding(story), 1500);
+      return;
+    }
+    // 按钮选择 + 自由对话共存：点按钮推进剧情，打字则和当前场景里的
+    // 「未来的自己」自由交流（不推进剧情）
+    input.placeholder = '也可以直接和未来的我聊聊……';
+    inputBar.classList.remove('hidden');
+    choicesBar.innerHTML = '';
+    story.choices.forEach((text, i) => {
+      const btn = document.createElement('button');
+      btn.className = 'choice-btn';
+      btn.textContent = text;
+      btn.onclick = () => choose(i, text, btn);
+      choicesBar.appendChild(btn);
+    });
+    choicesBar.classList.remove('hidden');
+  }
+
+  async function choose(idx, text, btn) {
+    if (choosing) return;
+    choosing = true;
+    [...choicesBar.children].forEach(b => b.disabled = true);
+    addMsg(chatMsgs, text, 'user');   // 孩子的选择以气泡形式留在对话里
+    try {
+      const data = await post('/api/story/choice', { index: idx });
+      if (data.ok && data.story) renderStory(data.story);
+    } catch (e) {
+      addMsg(chatMsgs, '❌ 网络错误：' + e.message, 'agent');
+    }
+    choosing = false;
+  }
+
+  // ---------- 结束界面 ----------
+  function showEnding(story) {
+    document.getElementById('endingTitle').textContent =
+      `${story.emoji} 结局 · ${story.title}`;
+    document.getElementById('endingLetter').textContent = story.narration;
+    document.getElementById('endingPath').textContent =
+      '你的旅程：\n' + story.path.map((p, i) => `${i + 1}. ${p}`).join('\n');
+    document.getElementById('endingOverlay').classList.remove('hidden');
+  }
+
+  document.getElementById('againBtn').onclick = async () => {
+    await post('/api/profile/reset');
+    document.getElementById('endingOverlay').classList.add('hidden');
+    startProfiling();
+  };
+
+  // ---------- 画面面板：只展示 AI 插画，未就绪时隐藏 ----------
+  let currentScene = null;
+  function updateScene(scene) {
+    if (!scene) return;   // 插画未就绪则保持当前画面
+    if (scene === currentScene) return;
+    currentScene = scene;
+    sceneImg.style.opacity = 0;
+    setTimeout(() => {
+      sceneImg.src = '/api/assets/' + scene + '?t=' + Date.now();
+      sceneImg.onload = () => {
+        scenePanel.classList.remove('hidden');
+        sceneImg.style.opacity = 1;
+      };
+    }, 300);
+  }
+
+  // 持续轮询：插画就绪、背景换新会自动反映（剧情文本不走轮询，避免重复）
+  let scenePoll = null;
+  function startScenePoll() {
+    if (scenePoll) clearInterval(scenePoll);
+    scenePoll = setInterval(async () => {
+      try {
+        const res = await fetch('/api/scene');
+        const data = await res.json();
+        updateScene(data.scene);
+        updateBg(data.bg);
+      } catch (e) { /* 忽略 */ }
+    }, 8000);
+  }
+
+  // ---------- 自由对话（剧情结束后不回到这里，保留接口兼容） ----------
+  async function chatSend() {
+    const msg = input.value.trim();
+    if (!msg) return;
+    addMsg(chatMsgs, msg, 'user');
+    input.value = '';
+    send.disabled = true;
+    try {
+      const data = await post('/api/chat', { message: msg });
+      addMsg(chatMsgs, data.reply, 'agent');
+      speakText(data.reply);
+      updateScene(data.scene);
+      updateBg(data.bg);
+    } catch (e) {
+      addMsg(chatMsgs, '❌ 网络错误：' + e.message, 'agent');
+    }
+    send.disabled = false;
+    input.focus();
+  }
+  send.onclick = chatSend;
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') chatSend(); });
+
+  // 语音输入按钮（说完自动发送）
+  setupMic(document.getElementById('profMic'), profInput, profChat);
+  setupMic(document.getElementById('chatMic'), input, chatSend);
+
+  // ---------- 页面打开：每次都重置会话，重新开始 ----------
+  function startProfiling() {
+    chatStage.classList.add('hidden');
+    profileStage.classList.remove('hidden');
+    profileStage.style.display = 'flex';
+    profMsgs.innerHTML = '';
+    profCount = 0;
+    finalizing = false;
+    choosing = false;
+    currentScene = null;
+    scenePanel.classList.add('hidden');
+    levelPill.classList.add('hidden');
+    choicesBar.classList.add('hidden');
+    inputBar.classList.remove('hidden');
+    addMsg(profMsgs, '嗨，小朋友！👋 告诉我，你是个什么样的人呀？', 'agent');
+    profInput.focus();
+  }
+
+  (async () => {
+    await post('/api/profile/reset');   // 清空上一次会话
+    startProfiling();
+  })();
+</script>
+</body>
+</html>

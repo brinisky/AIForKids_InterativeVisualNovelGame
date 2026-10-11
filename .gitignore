@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+.DS_Store
+__MACOSX/
+kimi_key.txt
+notes/assets/tts_*.mp3
